@@ -1,0 +1,47 @@
+{
+  "sections": [],
+  "tables": [
+    {
+      "name": "Table_1_0",
+      "title": "Table on page 1",
+      "page": 1,
+      "headers": [
+        "This",
+        "Is",
+        "What"
+      ],
+      "rows": [
+        {
+          "This": "will",
+          "Is": "Be",
+          "What": "hard"
+        }
+      ],
+      "footnotes": []
+    },
+    {
+      "name": "Table_1_0",
+      "title": "Table on page 1",
+      "page": 1,
+      "headers": [
+        "This",
+        "Is",
+        "What"
+      ],
+      "rows": [
+        {
+          "This": "will",
+          "Is": "Be",
+          "What": "hard"
+        }
+      ],
+      "footnotes": []
+    }
+  ],
+  "references": [],
+  "metadata": {
+    "total_sections": 0,
+    "total_tables": 2,
+    "total_pages": 1
+  }
+}
