@@ -1,23 +1,11 @@
 """
-HTML E-Laws Ingestion Pipeline Orchestrator (SIMPLIFIED)
+Simplified HTML E-Laws Ingestion Pipeline
 
-2-Stage Pipeline (optimized - no unnecessary stages):
-1. Extract - HTML → structured sections with clauses
-   - Uses structural parsing (BeautifulSoup)
-   - Optional GPT for complex text understanding
-   - Extracts clauses, definitions, references
-
+2-Stage Pipeline (no unnecessary stages):
+1. Extract - HTML → JSON with clauses/sections
 2. Ingest - JSON → Neo4j with fine-grained nodes
-   - One node per clause/subclause/item
-   - Vector embeddings for semantic search
-   - Hierarchical relationships preserved
 
-Results:
-- 1,500+ granular nodes (vs 30 in PDF approach)
-- Full clause-level queryability
-- Embeddings for semantic search
-- Proper hierarchical relationships
-- Best extraction quality with minimal complexity
+That's it. No middle enrichment stage.
 """
 
 import logging
@@ -27,50 +15,32 @@ from pathlib import Path
 from typing import Dict, Any
 from dotenv import load_dotenv
 
-# Add root to path
 sys.path.insert(0, str(Path(__file__).parents[3]))
 
-from stage1_html_extraction_v2 import HTMLExtractorV2 as HTMLExtractor
+from stage1_html_extraction import HTMLExtractor
 from ingestion.shared.src.core.graph_manager import GraphManager
 from ingestion.shared.src.core.embeddings import EmbeddingManager
 from ingestion.shared.config.sources import ELAWS_OBC_HTML_URL
 
-# Setup logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Load environment
 load_dotenv()
 
 
-class HTMLIngestPipeline:
-    """Orchestrates the 2-stage HTML ingestion pipeline"""
+class SimplifiedIngestPipeline:
+    """2-stage pipeline: Extract → Ingest"""
 
     def __init__(self, data_dir: str = "data", use_gpt: bool = True):
-        """
-        Initialize pipeline.
-
-        Args:
-            data_dir: Directory for input/output files
-            use_gpt: Whether to use GPT for intelligent extraction (recommended)
-        """
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(exist_ok=True)
         self.use_gpt = use_gpt
 
     def run(self, skip_stages: list = None) -> Dict[str, Any]:
-        """
-        Run the complete pipeline.
-
-        Args:
-            skip_stages: List of stage numbers to skip (1 or 2)
-
-        Returns:
-            Summary of pipeline execution
-        """
+        """Run the 2-stage pipeline"""
         skip_stages = skip_stages or []
         results = {
             "stage1_extraction": None,
@@ -80,7 +50,7 @@ class HTMLIngestPipeline:
         }
 
         try:
-            # Stage 1: Extract HTML to structured JSON
+            # Stage 1: Extract
             if 1 not in skip_stages:
                 logger.info("=" * 80)
                 logger.info("STAGE 1: Extract HTML → Structured Sections & Clauses")
@@ -122,7 +92,7 @@ class HTMLIngestPipeline:
         return results
 
     def _run_stage1(self) -> Dict[str, Any]:
-        """Run Stage 1: Extract HTML"""
+        """Stage 1: Extract HTML to structured JSON"""
         result = {
             "success": False,
             "sections_extracted": 0,
@@ -144,10 +114,7 @@ class HTMLIngestPipeline:
             result["clauses_extracted"] = extraction.get("total_clauses", 0)
             result["output_file"] = str(output_file)
 
-            logger.info(
-                f"Stage 1 complete: {result['clauses_extracted']} clauses "
-                f"in {result['sections_extracted']} sections"
-            )
+            logger.info(f"Stage 1 complete: {result['clauses_extracted']} clauses in {result['sections_extracted']} sections")
 
             return result
 
@@ -157,7 +124,7 @@ class HTMLIngestPipeline:
             return result
 
     def _run_stage2(self) -> Dict[str, Any]:
-        """Run Stage 2: Ingest to Neo4j"""
+        """Stage 2: Ingest extracted data to Neo4j"""
         result = {
             "success": False,
             "nodes_created": 0,
@@ -180,7 +147,9 @@ class HTMLIngestPipeline:
             graph = GraphManager()
             embedding_manager = EmbeddingManager()
 
-            stats = self._ingest_to_neo4j(extraction, graph, embedding_manager)
+            stats = self._ingest_extraction_to_neo4j(
+                extraction, graph, embedding_manager
+            )
 
             graph.close()
 
@@ -194,9 +163,6 @@ class HTMLIngestPipeline:
             result["clauses_ingested"] = stats.get("clauses_ingested", 0)
             result["output_file"] = str(output_file)
 
-            if stats.get("errors"):
-                result["errors"] = stats["errors"]
-
             logger.info(
                 f"Stage 2 complete: {result['nodes_created']} nodes, "
                 f"{result['clauses_ingested']} clauses ingested"
@@ -209,7 +175,7 @@ class HTMLIngestPipeline:
             result["error"] = str(e)
             return result
 
-    def _ingest_to_neo4j(
+    def _ingest_extraction_to_neo4j(
         self, extraction: Dict[str, Any], graph: GraphManager, em: EmbeddingManager
     ) -> Dict[str, Any]:
         """Ingest extracted data into Neo4j"""
@@ -222,7 +188,7 @@ class HTMLIngestPipeline:
         }
 
         try:
-            # Create regulation hierarchy
+            # Create regulation and hierarchy
             reg_query = """
             CREATE (r:Regulation {
                 regulation_id: '332/12',
@@ -236,7 +202,7 @@ class HTMLIngestPipeline:
             reg_id = reg_result[0]["neo4j_id"] if reg_result else None
             stats["nodes_created"] += 1
 
-            # Create Division
+            # Create Division and Part (simplified)
             div_query = """
             CREATE (d:Division {division_id: 'A', title: 'Compliance and Objectives'})
             RETURN id(d) as neo4j_id
@@ -253,12 +219,8 @@ class HTMLIngestPipeline:
                 )
                 stats["relationships_created"] += 1
 
-            # Create Part
             part_query = """
-            CREATE (p:Part {
-                part_number: '3',
-                title: 'Fire Protection, Occupant Safety and Accessibility'
-            })
+            CREATE (p:Part {part_number: '3', title: 'Fire Protection, Occupant Safety and Accessibility'})
             RETURN id(p) as neo4j_id
             """
             part_result = graph.execute_query(part_query, {})
@@ -285,7 +247,10 @@ class HTMLIngestPipeline:
 
                     # Create section node
                     section_query = """
-                    CREATE (s:Section {section_number: $number, title: $title})
+                    CREATE (s:Section {
+                        section_number: $number,
+                        title: $title
+                    })
                     RETURN id(s) as neo4j_id
                     """
                     section_result = graph.execute_query(section_query, {
@@ -306,7 +271,7 @@ class HTMLIngestPipeline:
                             stats["relationships_created"] += 1
 
                         # Create clause nodes
-                        for clause in clauses:
+                        for clause_idx, clause in enumerate(clauses):
                             try:
                                 clause_number = clause.get("number", "")
                                 clause_text = clause.get("text", "")
@@ -341,7 +306,7 @@ class HTMLIngestPipeline:
                                     )
                                     stats["relationships_created"] += 1
 
-                                    # Create nested items
+                                    # Create nested items (subclauses)
                                     nested_items = clause.get("nested_items", [])
                                     for item in nested_items:
                                         item_number = item.get("number", "")
@@ -375,7 +340,7 @@ class HTMLIngestPipeline:
                                             stats["relationships_created"] += 1
 
                             except Exception as e:
-                                logger.warning(f"Error creating clause: {e}")
+                                logger.warning(f"Error creating clause {clause_idx}: {e}")
                                 stats["errors"].append(str(e))
                                 continue
 
@@ -384,10 +349,7 @@ class HTMLIngestPipeline:
                     stats["errors"].append(str(e))
                     continue
 
-            logger.info(
-                f"Ingestion complete: {stats['nodes_created']} nodes, "
-                f"{stats['clauses_ingested']} clauses"
-            )
+            logger.info(f"Ingestion complete: {stats['nodes_created']} nodes, {stats['clauses_ingested']} clauses")
 
         except Exception as e:
             stats["success"] = False
@@ -403,28 +365,28 @@ class HTMLIngestPipeline:
 
         if results["stage1_extraction"]:
             s1 = results["stage1_extraction"]
-            logger.info(f"Stage 1 - Extract:")
+            logger.info(f"Stage 1 - HTML Extraction:")
             logger.info(f"  Sections: {s1.get('sections_extracted', 0)}")
             logger.info(f"  Clauses: {s1.get('clauses_extracted', 0)}")
             logger.info(f"  Output: {s1.get('output_file', 'N/A')}")
 
         if results["stage2_ingestion"]:
             s2 = results["stage2_ingestion"]
-            logger.info(f"Stage 2 - Ingest:")
-            logger.info(f"  Nodes: {s2.get('nodes_created', 0)}")
-            logger.info(f"  Clauses: {s2.get('clauses_ingested', 0)}")
+            logger.info(f"Stage 2 - Neo4j Ingestion:")
+            logger.info(f"  Nodes created: {s2.get('nodes_created', 0)}")
+            logger.info(f"  Clauses ingested: {s2.get('clauses_ingested', 0)}")
             logger.info(f"  Relationships: {s2.get('relationships_created', 0)}")
             logger.info(f"  Output: {s2.get('output_file', 'N/A')}")
 
         logger.info("-" * 80)
-        logger.info(f"Success: {results['success']}")
+        logger.info(f"Overall Success: {results['success']}")
 
 
 def main():
-    """Run the pipeline"""
+    """Run the simplified pipeline"""
     import argparse
 
-    parser = argparse.ArgumentParser(description="HTML E-Laws Ingestion Pipeline (Simplified)")
+    parser = argparse.ArgumentParser(description="Simplified HTML E-Laws Ingestion Pipeline")
     parser.add_argument(
         "--skip-stages",
         type=int,
@@ -446,7 +408,7 @@ def main():
 
     args = parser.parse_args()
 
-    pipeline = HTMLIngestPipeline(
+    pipeline = SimplifiedIngestPipeline(
         data_dir=args.data_dir,
         use_gpt=not args.no_gpt
     )
