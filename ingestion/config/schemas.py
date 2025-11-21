@@ -4,7 +4,7 @@ Centralized schema definitions for all legal document processing.
 Contains reusable schema templates for document ingestion and graph building.
 """
 
-from ingestion.shared.src.core.schema import Schema, NodeDef, PropertyDef, RelDef
+from ingestion.src.core.schema import Schema, NodeDef, PropertyDef, RelDef
 
 
 def create_legal_document_schema() -> Schema:

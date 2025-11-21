@@ -1,7 +1,7 @@
 import json
 from typing import List, Dict, Any, Optional
 from openai import OpenAI
-from ingestion.shared.src.core.schema import Schema, NodeDef, RelDef
+from ingestion.src.core.schema import Schema, NodeDef, RelDef
 import logging
 
 logger = logging.getLogger(__name__)

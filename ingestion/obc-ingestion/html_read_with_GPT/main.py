@@ -32,9 +32,9 @@ sys.path.insert(0, str(Path(__file__).parents[3]))
 
 from stage1_html_extraction_v2 import HTMLExtractorV2 as HTMLExtractor
 from stage2_obc_graph_builder import OBCGraphBuilder
-from ingestion.shared.src.core.graph_manager import GraphManager
-from ingestion.shared.src.core.embeddings import EmbeddingManager
-from ingestion.shared.config.sources import ELAWS_OBC_HTML_URL
+from ingestion.src.core.graph_manager import GraphManager
+from ingestion.src.core.embeddings import EmbeddingManager
+from ingestion.config.sources import ELAWS_OBC_HTML_URL
 
 # Setup logging
 logging.basicConfig(

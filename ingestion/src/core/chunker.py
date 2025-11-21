@@ -1,5 +1,5 @@
 from typing import List, Dict
-from ingestion.shared.config.settings import CHUNK_SIZE, CHUNK_OVERLAP
+from ingestion.config.settings import CHUNK_SIZE, CHUNK_OVERLAP
 import hashlib
 
 class DocumentChunker:

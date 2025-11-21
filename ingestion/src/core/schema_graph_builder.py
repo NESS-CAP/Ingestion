@@ -1,6 +1,6 @@
 from typing import Dict, List, Any, Optional
-from ingestion.shared.src.core.graph_manager import GraphManager
-from ingestion.shared.src.core.schema import Schema, create_elaws_obc_schema
+from ingestion.src.core.graph_manager import GraphManager
+from ingestion.src.core.schema import Schema, create_elaws_obc_schema
 import logging
 
 logger = logging.getLogger(__name__)

@@ -19,8 +19,8 @@ import sys
 # Add root ingestion directory to path
 sys.path.insert(0, str(Path(__file__).parents[3]))
 
-from ingestion.shared.config.sources import ELAWS_OBC_HTML_URL
-from ingestion.shared.config.settings import CHUNK_SIZE
+from ingestion.config.sources import ELAWS_OBC_HTML_URL
+from ingestion.config.settings import CHUNK_SIZE
 
 logger = logging.getLogger(__name__)
 

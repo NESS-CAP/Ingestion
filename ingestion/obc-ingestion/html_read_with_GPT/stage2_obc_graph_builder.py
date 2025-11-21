@@ -19,9 +19,9 @@ import re
 
 sys.path.insert(0, str(Path(__file__).parents[3]))
 
-from ingestion.shared.src.core.graph_manager import GraphManager
-from ingestion.shared.src.core.obc_schema import create_obc_schema
-from ingestion.shared.src.core.embeddings import EmbeddingManager
+from ingestion.src.core.graph_manager import GraphManager
+from ingestion.src.core.obc_schema import create_obc_schema
+from ingestion.src.core.embeddings import EmbeddingManager
 
 logger = logging.getLogger(__name__)
 

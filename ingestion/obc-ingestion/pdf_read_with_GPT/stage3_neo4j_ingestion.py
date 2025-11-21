@@ -20,9 +20,9 @@ from dataclasses import dataclass, asdict
 sys.path.insert(0, str(Path(__file__).parents[3]))
 
 # Import shared modules
-from ingestion.shared.src.core.graph_manager import GraphManager
-from ingestion.shared.src.core.schema import create_elaws_obc_schema
-from ingestion.shared.src.core.embeddings import EmbeddingManager
+from ingestion.src.core.graph_manager import GraphManager
+from ingestion.src.core.schema import create_elaws_obc_schema
+from ingestion.src.core.embeddings import EmbeddingManager
 
 logger = logging.getLogger(__name__)
 

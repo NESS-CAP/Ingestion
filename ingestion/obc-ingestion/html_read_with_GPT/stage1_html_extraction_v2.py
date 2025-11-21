@@ -417,7 +417,7 @@ TEXT (section {section_number}):
 def main():
     """Test extraction"""
     import sys
-    from ingestion.shared.config.sources import ELAWS_OBC_HTML_URL
+    from ingestion.config.sources import ELAWS_OBC_HTML_URL
 
     logging.basicConfig(level=logging.INFO)
 

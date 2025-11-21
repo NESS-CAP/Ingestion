@@ -12,13 +12,13 @@ from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
 
-# Import local modules (stages 1 and 2 don't depend on ingestion.shared)
+# Import local modules (stages 1 and 2 don't depend on ingestion core)
 from stage1_extraction import Stage1Extractor
 from stage2_enrichment import Stage2Enrichment
 
 # Add root ingestion directory to path for imports BEFORE stage3 import
 sys.path.insert(0, str(Path(__file__).parents[3]))
-# Now we can safely import stage3 which depends on ingestion.shared
+# Now we can safely import stage3 which depends on ingestion core modules
 from stage3_neo4j_ingestion import Neo4jOBCIngester
 
 # Setup logging
@@ -130,7 +130,7 @@ def main():
         logger.info("=" * 60)
 
         try:
-            from ingestion.shared.src.core.graph_manager import GraphManager
+            from ingestion.src.core.graph_manager import GraphManager
 
             graph = GraphManager()
             ingester = Neo4jOBCIngester(graph)

@@ -1,5 +1,5 @@
 from neo4j import GraphDatabase
-from ingestion.shared.config.settings import NEO4J_CONFIG
+from ingestion.config.settings import NEO4J_CONFIG
 from typing import List, Dict, Any, Optional
 import logging
 

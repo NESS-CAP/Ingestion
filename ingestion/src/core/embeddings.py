@@ -1,6 +1,6 @@
 from sentence_transformers import SentenceTransformer
 from typing import List
-from ingestion.shared.config.settings import EMBEDDING_MODEL
+from ingestion.config.settings import EMBEDDING_MODEL
 
 class EmbeddingManager:
     """Manages text embeddings using sentence-transformers"""
