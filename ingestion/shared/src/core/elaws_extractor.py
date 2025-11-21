@@ -246,18 +246,35 @@ class ELawsOBCExtractor:
         section_id = self._ensure_section(section_number, section_title)
         self.section_stack.append(section_id)
 
-        # Now extract subsections (3.2.2.1, 3.2.2.2, etc.)
-        # Pattern: 3.2.2.N. Title(1) content...
-        subsection_pattern = r'3\.2\.2\.(\d+)\.\s*([^(]*?)(?=3\.2\.2\.\d+\.|$)'
+        # Split by subsection headers: 3.2.2.N. where N is a number
+        # Use lookahead to split without consuming the pattern
+        subsection_parts = re.split(r'(?=3\.2\.2\.(\d+)\.)', section_text)
 
+        # Process each subsection
         current_clause_id = None
         current_subclause_id = None
         global_sequence = 0
 
-        for subsection_match in re.finditer(subsection_pattern, section_text, re.DOTALL):
-            subsection_num = subsection_match.group(1)
-            subsection_content = subsection_match.group(0)
-            subsection_title = subsection_match.group(2).strip()
+        processed_subsections = set()  # Track which subsections we've processed to avoid duplicates
+
+        for subsection_text in subsection_parts:
+            if not subsection_text.strip():
+                continue
+
+            # Extract subsection number and title from the beginning
+            match = re.match(r'3\.2\.2\.(\d+)\.\s*([^(]*?)(.*)$', subsection_text, re.DOTALL)
+            if not match:
+                continue
+
+            subsection_num = match.group(1)
+
+            # Skip duplicate subsections (they can appear multiple times in references)
+            if subsection_num in processed_subsections:
+                continue
+            processed_subsections.add(subsection_num)
+
+            subsection_title = match.group(2).strip()
+            subsection_content = subsection_text
 
             # Create a sub-section node (e.g., 3.2.2.1)
             subsection_number = f"3.2.2.{subsection_num}"

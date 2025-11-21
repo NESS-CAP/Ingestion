@@ -19,6 +19,7 @@ import json
 import re
 from pathlib import Path
 import sys
+import subprocess
 import requests
 from bs4 import BeautifulSoup
 from openai import OpenAI
@@ -40,24 +41,45 @@ class HTMLExtractorV2:
     def extract_from_url(self, url: str) -> Dict[str, Any]:
         """Extract from HTML URL"""
         logger.info(f"Fetching HTML from {url}")
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
-        return self.extract_from_html(response.text)
+
+        try:
+            # Use curl which seems to get the full content better than requests
+            logger.debug("Using curl to fetch HTML")
+            result = subprocess.run(
+                ['curl', '-s', url],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            if result.returncode != 0:
+                logger.warning(f"curl failed: {result.stderr}, falling back to requests")
+                raise RuntimeError("curl failed")
+
+            html_content = result.stdout
+
+        except (FileNotFoundError, RuntimeError):
+            # Fallback to requests if curl not available
+            logger.debug("Falling back to requests")
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+            response = requests.get(url, timeout=30, headers=headers)
+            response.raise_for_status()
+            html_content = response.text
+
+        return self.extract_from_html(html_content)
 
     def extract_from_html(self, html_content: str) -> Dict[str, Any]:
-        """Extract all structure from HTML"""
-        logger.info("Parsing HTML")
+        """Extract all structure from HTML using BeautifulSoup with CSS classes"""
+        logger.info("Parsing HTML with CSS class-based extraction")
         soup = BeautifulSoup(html_content, 'html.parser')
 
         # Remove scripts and styles
         for script in soup(["script", "style"]):
             script.decompose()
 
-        # Get all text with minimal processing
-        text = soup.get_text(separator='\n', strip=True)
-
-        # Extract sections using the natural structure
-        sections = self._extract_all_sections(text)
+        # Extract sections using CSS classes: ruleb-e for main sections
+        sections = self._extract_sections_by_css(soup)
 
         logger.info(f"Extracted {len(sections)} sections")
 
@@ -76,14 +98,73 @@ class HTMLExtractorV2:
             total_clauses += len(section["extracted_clauses"])
 
         return {
-            "source": "HTML extraction v2",
+            "source": "HTML extraction v2 (CSS-based)",
             "sections": sections,
             "total_sections": len(sections),
             "total_clauses": total_clauses,
         }
 
+    def _extract_sections_by_css(self, soup) -> List[Dict[str, Any]]:
+        """Extract sections using BeautifulSoup CSS class selectors (ruleb-e, section-e, subsection-e)"""
+        sections = []
+
+        # Find all section headers with class 'ruleb-e'
+        section_headers = soup.find_all('p', class_='ruleb-e')
+
+        logger.info(f"Found {len(section_headers)} section headers")
+
+        for header_idx, header in enumerate(section_headers):
+            section_text = header.get_text().strip()
+
+            # Extract section number (e.g., "1.1.1." or "Section 1.1.")
+            section_match = re.match(r'^(?:Section\s+)?(\d+\.\d+(?:\.\d+)*)', section_text)
+            if not section_match:
+                logger.debug(f"Skipping header without number: {section_text[:50]}")
+                continue
+
+            section_num = section_match.group(1)
+            section_title = section_text
+
+            # Collect all content until the next section header
+            content_lines = []
+
+            # Start from the next element after this header
+            current = header.next_sibling
+
+            while current:
+                # Stop if we hit the next section header
+                if isinstance(current, type(header)):
+                    if hasattr(current, 'get') and current.get('class'):
+                        if 'ruleb-e' in current.get('class', []):
+                            break
+
+                # Extract text from various content elements
+                if hasattr(current, 'get_text'):
+                    # Use separator to add spaces between inline elements (em, strong, etc.)
+                    text = current.get_text(separator=' ', strip=True)
+                    # Clean up multiple spaces
+                    text = re.sub(r'\s+', ' ', text)
+                    if text and len(text) > 3:  # Skip very short lines
+                        content_lines.append(text)
+
+                current = current.next_sibling
+
+            content_text = '\n'.join(content_lines).strip()
+
+            if content_text and len(content_text) > 10:
+                section = {
+                    "section_number": section_num,
+                    "title": section_title,
+                    "content": content_text,
+                    "extracted_clauses": []
+                }
+                sections.append(section)
+                logger.debug(f"Extracted section {section_num}: {len(content_text)} chars")
+
+        return sections
+
     def _extract_all_sections(self, text: str) -> List[Dict[str, Any]]:
-        """Extract sections using section number patterns"""
+        """Extract sections using section number patterns (fallback for plain text)"""
         sections = []
 
         # Pattern to find section numbers: 3.2.2, 3.2.2.1, etc.
@@ -137,17 +218,20 @@ class HTMLExtractorV2:
         """Smart clause extraction using multi-pass approach"""
         clauses = []
 
-        # Split by main clause delimiters: (1), (2), (3), etc.
-        # Use a positive lookahead to split but keep the delimiter
-        clause_splits = re.split(r'(?=\(\d+\))', text)
+        # Split by main clause delimiters: (1), (2), (3), ..., (18), (18.1), (xii), (xiii), (xviii.1), etc.
+        # Matches: (digits), (digits.digits), (roman numerals), or (roman numerals.digits) formats
+        # Roman numerals: i, ii, iii, iv, v, vi, vii, viii, ix, x, xi, xii, xiii, xiv, xv, xvi, xvii, xviii, xix, xx, etc.
+        roman_pattern = r'(?:xx|xix|xviii|xvii|xvi|xv|xiv|xiii|xii|xi|x|ix|viii|vii|vi|v|iv|iii|ii|i)'
+        clause_delimiter_pattern = f'(?=\\((?:\\d+(?:\\.\\d+)?|{roman_pattern}(?:\\.\\d+)?)\\))'
+        clause_splits = re.split(clause_delimiter_pattern, text)
 
-        for clause_text in clause_splits:
+        for clause_idx, clause_text in enumerate(clause_splits):
             clause_text = clause_text.strip()
             if not clause_text:
                 continue
 
-            # Extract the clause number
-            clause_match = re.match(r'\((\d+)\)(.*)', clause_text, re.DOTALL)
+            # Extract the clause number - supports (1), (18.1), (xii), (xviii.1) formats
+            clause_match = re.match(f'\\((\\d+(?:\\.\\d+)?|{roman_pattern}(?:\\.\\d+)?)\\)(.*)', clause_text, re.DOTALL)
             if not clause_match:
                 continue
 
@@ -155,8 +239,10 @@ class HTMLExtractorV2:
             clause_content = clause_match.group(2).strip()
 
             # Find where the next clause would start (if any)
-            next_clause_match = re.search(r'\(\d+\)', clause_content)
+            # Only look for next clause at line boundaries
+            next_clause_match = re.search(f'^\\((?:\\d+(?:\\.\\d+)?|{roman_pattern}(?:\\.\\d+)?)\\)', clause_content, re.MULTILINE)
             if next_clause_match:
+                # This means we have content from the next clause, truncate there
                 clause_content = clause_content[:next_clause_match.start()].strip()
 
             if len(clause_content) < 10:
@@ -167,7 +253,7 @@ class HTMLExtractorV2:
 
             clause_obj = {
                 "number": f"({clause_num})",
-                "text": clause_content[:1000],  # Store full text
+                "text": clause_content,  # Store FULL text without truncation
                 "type": "clause",
                 "nested_items": nested_items
             }
@@ -187,7 +273,7 @@ class HTMLExtractorV2:
         # Split by subclause delimiters: (a), (b), (c), etc.
         subclause_splits = re.split(r'(?=\([a-z]\))', text)
 
-        for subclause_text in subclause_splits:
+        for sub_idx, subclause_text in enumerate(subclause_splits):
             subclause_text = subclause_text.strip()
             if not subclause_text:
                 continue
@@ -200,8 +286,8 @@ class HTMLExtractorV2:
             sub_letter = subclause_match.group(1)
             sub_content = subclause_match.group(2).strip()
 
-            # Find where next subclause starts
-            next_sub_match = re.search(r'\([a-z]\)', sub_content)
+            # Find where next subclause starts (at line start only)
+            next_sub_match = re.search(r'^\([a-z]\)', sub_content)
             if next_sub_match:
                 sub_content = sub_content[:next_sub_match.start()].strip()
 
@@ -213,7 +299,7 @@ class HTMLExtractorV2:
 
             nested_obj = {
                 "number": f"({sub_letter})",
-                "text": sub_content[:500],
+                "text": sub_content,  # Store FULL text without truncation
                 "type": "subclause",
                 "nested_items": items
             }
@@ -223,15 +309,16 @@ class HTMLExtractorV2:
         return nested
 
     def _extract_roman_items(self, text: str) -> List[Dict[str, Any]]:
-        """Extract roman numeral items: (i), (ii), (iii), etc."""
+        """Extract roman numeral items: (i), (ii), (iii), (iv), (v), etc."""
         items = []
 
-        # Pattern for roman numerals: (i), (ii), (iii), (iv), etc.
-        roman_pattern = r'\(([iv]+)\)'
+        # Pattern for roman numerals: (i), (ii), (iii), (iv), (v), (vi), (vii), (viii), (ix), etc.
+        # Matches: i, ii, iii, iv, v, vi, vii, viii, ix
+        roman_pattern = r'\(((?:viii|vii|vi|iv|ix|v|iii|ii|i))\)'
 
         roman_splits = re.split(f'(?={roman_pattern})', text)
 
-        for roman_text in roman_splits:
+        for roman_idx, roman_text in enumerate(roman_splits):
             roman_text = roman_text.strip()
             if not roman_text:
                 continue
@@ -243,8 +330,8 @@ class HTMLExtractorV2:
             roman_num = roman_match.group(1)
             roman_content = roman_match.group(2).strip()
 
-            # Find next roman numeral
-            next_roman_match = re.search(roman_pattern, roman_content)
+            # Find next roman numeral (at line start only to avoid false positives)
+            next_roman_match = re.search(f'^{roman_pattern}', roman_content, re.MULTILINE)
             if next_roman_match:
                 roman_content = roman_content[:next_roman_match.start()].strip()
 
@@ -253,7 +340,7 @@ class HTMLExtractorV2:
 
             item_obj = {
                 "number": f"({roman_num})",
-                "text": roman_content[:300],
+                "text": roman_content,  # Store FULL text without truncation
                 "type": "item"
             }
 

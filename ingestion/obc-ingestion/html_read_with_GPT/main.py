@@ -31,6 +31,7 @@ from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).parents[3]))
 
 from stage1_html_extraction_v2 import HTMLExtractorV2 as HTMLExtractor
+from stage2_obc_graph_builder import OBCGraphBuilder
 from ingestion.shared.src.core.graph_manager import GraphManager
 from ingestion.shared.src.core.embeddings import EmbeddingManager
 from ingestion.shared.config.sources import ELAWS_OBC_HTML_URL
@@ -49,17 +50,21 @@ load_dotenv()
 class HTMLIngestPipeline:
     """Orchestrates the 2-stage HTML ingestion pipeline"""
 
-    def __init__(self, data_dir: str = "data", use_gpt: bool = True):
+    def __init__(self, data_dir: str = "data", use_gpt: bool = True, start_page: int = None, end_page: int = None):
         """
         Initialize pipeline.
 
         Args:
             data_dir: Directory for input/output files
             use_gpt: Whether to use GPT for intelligent extraction (recommended)
+            start_page: Starting page number for extraction (1-indexed, inclusive)
+            end_page: Ending page number for extraction (1-indexed, inclusive)
         """
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(exist_ok=True)
         self.use_gpt = use_gpt
+        self.start_page = start_page
+        self.end_page = end_page
 
     def run(self, skip_stages: list = None) -> Dict[str, Any]:
         """
@@ -76,7 +81,8 @@ class HTMLIngestPipeline:
             "stage1_extraction": None,
             "stage2_ingestion": None,
             "success": True,
-            "errors": []
+            "errors": [],
+            "page_range": f"{self.start_page}-{self.end_page}" if self.start_page or self.end_page else "all"
         }
 
         try:
@@ -127,7 +133,8 @@ class HTMLIngestPipeline:
             "success": False,
             "sections_extracted": 0,
             "clauses_extracted": 0,
-            "output_file": None
+            "output_file": None,
+            "page_filter_applied": False
         }
 
         try:
@@ -135,6 +142,14 @@ class HTMLIngestPipeline:
 
             logger.info(f"Extracting from {ELAWS_OBC_HTML_URL}")
             extraction = extractor.extract_from_url(ELAWS_OBC_HTML_URL)
+
+            # Filter sections by page range if specified
+            if self.start_page is not None or self.end_page is not None:
+                extraction = self._filter_sections_by_page(extraction)
+                result["page_filter_applied"] = True
+                logger.info(
+                    f"Filtered sections to page range {self.start_page or '1'}-{self.end_page or 'all'}"
+                )
 
             output_file = self.data_dir / "extracted.json"
             extractor.save_extraction(extraction, str(output_file))
@@ -156,13 +171,72 @@ class HTMLIngestPipeline:
             result["error"] = str(e)
             return result
 
+    def _filter_sections_by_page(self, extraction: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Filter sections by page range.
+
+        Assumes sections are ordered sequentially and groups them by approximate page boundaries.
+        Uses character count to estimate page breaks (typical page ~2000-3000 chars).
+
+        Args:
+            extraction: Extracted data with sections
+
+        Returns:
+            Filtered extraction with only sections in specified page range
+        """
+        sections = extraction.get("sections", [])
+        if not sections:
+            return extraction
+
+        # Character count per page (approximate)
+        chars_per_page = 2500
+
+        # Calculate cumulative character count for each section
+        cumulative_chars = 0
+        sections_with_pages = []
+
+        for section in sections:
+            section_chars = len(section.get("content", ""))
+            start_page = (cumulative_chars // chars_per_page) + 1
+            cumulative_chars += section_chars
+            end_page = (cumulative_chars // chars_per_page) + 1
+
+            sections_with_pages.append({
+                "section": section,
+                "start_page": start_page,
+                "end_page": end_page
+            })
+
+        # Filter sections based on page range
+        start = self.start_page or 1
+        end = self.end_page or float('inf')
+
+        filtered_sections = []
+        total_clauses = 0
+
+        for item in sections_with_pages:
+            # Include section if it overlaps with the requested page range
+            if item["end_page"] >= start and item["start_page"] <= end:
+                filtered_sections.append(item["section"])
+                total_clauses += len(item["section"].get("extracted_clauses", []))
+
+        logger.info(
+            f"Filtered from {len(sections)} to {len(filtered_sections)} sections "
+            f"(pages {start}-{end})"
+        )
+
+        extraction["sections"] = filtered_sections
+        extraction["total_sections"] = len(filtered_sections)
+        extraction["total_clauses"] = total_clauses
+
+        return extraction
+
     def _run_stage2(self) -> Dict[str, Any]:
-        """Run Stage 2: Ingest to Neo4j"""
+        """Run Stage 2: Build OBC graph from extracted data"""
         result = {
             "success": False,
             "nodes_created": 0,
             "relationships_created": 0,
-            "clauses_ingested": 0,
             "output_file": None
         }
 
@@ -175,32 +249,31 @@ class HTMLIngestPipeline:
             with open(extracted_file, "r", encoding="utf-8") as f:
                 extraction = json.load(f)
 
-            logger.info(f"Connecting to Neo4j and ingesting {extraction['total_sections']} sections")
+            logger.info(f"Building OBC graph for {extraction['total_sections']} sections")
 
             graph = GraphManager()
-            embedding_manager = EmbeddingManager()
+            builder = OBCGraphBuilder(graph)
 
-            stats = self._ingest_to_neo4j(extraction, graph, embedding_manager)
+            # Build the graph using the new OBC schema
+            stats = builder.build(extraction)
 
             graph.close()
 
-            output_file = self.data_dir / "ingestion_stats.json"
+            output_file = self.data_dir / "graph_build_stats.json"
             with open(output_file, "w", encoding="utf-8") as f:
                 json.dump(stats, f, indent=2)
 
             result["success"] = stats.get("success", False)
-            result["nodes_created"] = stats.get("nodes_created", 0)
+            result["nodes_created"] = stats["nodes_created"].get("total", 0)
             result["relationships_created"] = stats.get("relationships_created", 0)
-            result["clauses_ingested"] = stats.get("clauses_ingested", 0)
             result["output_file"] = str(output_file)
+            result["node_breakdown"] = stats["nodes_created"]
 
             if stats.get("errors"):
                 result["errors"] = stats["errors"]
 
-            logger.info(
-                f"Stage 2 complete: {result['nodes_created']} nodes, "
-                f"{result['clauses_ingested']} clauses ingested"
-            )
+            logger.info(f"Stage 2 complete: {result['nodes_created']} total nodes created")
+            logger.info(f"Breakdown: {stats['nodes_created']}")
 
             return result
 
@@ -443,12 +516,26 @@ def main():
         action="store_true",
         help="Skip GPT and use structural extraction only (faster, less accurate)"
     )
+    parser.add_argument(
+        "--start-page",
+        type=int,
+        default=None,
+        help="Starting page number for extraction (1-indexed, inclusive)"
+    )
+    parser.add_argument(
+        "--end-page",
+        type=int,
+        default=None,
+        help="Ending page number for extraction (1-indexed, inclusive)"
+    )
 
     args = parser.parse_args()
 
     pipeline = HTMLIngestPipeline(
         data_dir=args.data_dir,
-        use_gpt=not args.no_gpt
+        use_gpt=not args.no_gpt,
+        start_page=args.start_page,
+        end_page=args.end_page
     )
     results = pipeline.run(skip_stages=args.skip_stages)
 
