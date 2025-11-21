@@ -28,7 +28,7 @@ from typing import Dict, Any
 from dotenv import load_dotenv
 
 # Add root to path
-sys.path.insert(0, str(Path(__file__).parents[3]))
+sys.path.insert(0, str(Path(__file__).parents[4]))
 
 from stage1_html_extraction_v2 import HTMLExtractorV2 as HTMLExtractor
 from stage2_obc_graph_builder import OBCGraphBuilder

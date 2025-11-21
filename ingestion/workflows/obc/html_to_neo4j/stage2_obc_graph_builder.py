@@ -17,7 +17,7 @@ import sys
 from datetime import datetime
 import re
 
-sys.path.insert(0, str(Path(__file__).parents[3]))
+sys.path.insert(0, str(Path(__file__).parents[4]))
 
 from ingestion.src.core.graph_manager import GraphManager
 from ingestion.src.core.obc_schema import create_obc_schema

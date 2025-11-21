@@ -19,7 +19,7 @@ from pathlib import Path
 import sys
 import hashlib
 
-sys.path.insert(0, str(Path(__file__).parents[3]))
+sys.path.insert(0, str(Path(__file__).parents[4]))
 
 from ingestion.src.core.graph_manager import GraphManager
 from ingestion.src.core.embeddings import EmbeddingManager

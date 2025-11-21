@@ -20,7 +20,7 @@ import sys
 from openai import OpenAI
 import time
 
-sys.path.insert(0, str(Path(__file__).parents[3]))
+sys.path.insert(0, str(Path(__file__).parents[4]))
 
 logger = logging.getLogger(__name__)
 

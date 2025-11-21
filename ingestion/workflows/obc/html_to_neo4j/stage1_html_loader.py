@@ -17,7 +17,7 @@ from bs4 import BeautifulSoup
 import sys
 
 # Add root ingestion directory to path
-sys.path.insert(0, str(Path(__file__).parents[3]))
+sys.path.insert(0, str(Path(__file__).parents[4]))
 
 from ingestion.config.sources import ELAWS_OBC_HTML_URL
 from ingestion.config.settings import CHUNK_SIZE
