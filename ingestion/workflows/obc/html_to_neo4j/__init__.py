@@ -1,13 +1,20 @@
-"""HTML-based e-laws ingestion pipeline with GPT extraction"""
+"""HTML-based e-laws ingestion pipeline"""
 
-from .main import HTMLIngestPipeline
-from .stage1_html_loader import HTMLLoader
-from .stage2_gpt_extraction import GPTContentExtractor
-from .stage3_neo4j_html_ingestion import Neo4jHTMLIngester
+def __getattr__(name):
+    """Lazy load modules to avoid import errors for optional dependencies"""
+    if name == "HTMLIngestPipeline":
+        from .main import HTMLIngestPipeline
+        return HTMLIngestPipeline
+    elif name == "HTMLLoader":
+        from .stage1_html_loader import HTMLLoader
+        return HTMLLoader
+    elif name == "Neo4jHTMLIngester":
+        from .stage3_neo4j_html_ingestion import Neo4jHTMLIngester
+        return Neo4jHTMLIngester
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     "HTMLIngestPipeline",
     "HTMLLoader",
-    "GPTContentExtractor",
     "Neo4jHTMLIngester"
 ]

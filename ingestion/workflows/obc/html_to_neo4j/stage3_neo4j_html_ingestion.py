@@ -517,7 +517,7 @@ def main():
     """Run Neo4j ingestion"""
     logging.basicConfig(level=logging.INFO)
 
-    extracted_path = "data/gpt_extracted.json"
+    extracted_path = "data/extracted.json"
 
     if not Path(extracted_path).exists():
         logger.error(f"Extracted file not found: {extracted_path}")

@@ -1,10 +1,11 @@
 """
-HTML E-Laws Ingestion Pipeline Orchestrator (SIMPLIFIED)
+HTML E-Laws Ingestion Pipeline Orchestrator
 
-2-Stage Pipeline (optimized - no unnecessary stages):
+2-Stage Pipeline:
 1. Extract - HTML → structured sections with clauses
-   - Uses structural parsing (BeautifulSoup)
-   - Optional GPT for complex text understanding
+   - Uses BeautifulSoup for structural parsing
+   - CSS class-based section extraction
+   - Regex-based clause and subclause detection
    - Extracts clauses, definitions, references
 
 2. Ingest - JSON → Neo4j with fine-grained nodes
@@ -13,11 +14,10 @@ HTML E-Laws Ingestion Pipeline Orchestrator (SIMPLIFIED)
    - Hierarchical relationships preserved
 
 Results:
-- 1,500+ granular nodes (vs 30 in PDF approach)
+- 1,500+ granular nodes
 - Full clause-level queryability
 - Embeddings for semantic search
 - Proper hierarchical relationships
-- Best extraction quality with minimal complexity
 """
 
 import logging
@@ -30,11 +30,30 @@ from dotenv import load_dotenv
 # Add root to path
 sys.path.insert(0, str(Path(__file__).parents[4]))
 
-from stage1_html_extraction_v2 import HTMLExtractorV2 as HTMLExtractor
-from stage2_obc_graph_builder import OBCGraphBuilder
+from ingestion.workflows.obc.html_to_neo4j.stage1_html_extraction import HTMLExtractorV2 as HTMLExtractor
+from ingestion.workflows.obc.html_to_neo4j.stage2_obc_graph_builder import OBCGraphBuilder
 from ingestion.src.core.graph_manager import GraphManager
 from ingestion.src.core.embeddings import EmbeddingManager
-from ingestion.config.sources import ELAWS_OBC_HTML_URL
+
+
+def get_elaws_url():
+    """Load e-laws URL from file"""
+    # Try multiple potential paths to find the file
+    possible_paths = [
+        Path(__file__).parents[4] / "ingestion" / "data" / "e-laws_url.txt",  # From workflow
+        Path(__file__).parents[4] / "data" / "e-laws_url.txt",                  # Direct under root
+    ]
+
+    for url_file in possible_paths:
+        if url_file.exists():
+            with open(url_file, 'r') as f:
+                return f.read().strip()
+
+    # Fallback to hardcoded URL if file not found
+    return "https://www.ontario.ca/laws/regulation/120332"
+
+
+ELAWS_OBC_HTML_URL = get_elaws_url()
 
 # Setup logging
 logging.basicConfig(
@@ -50,19 +69,17 @@ load_dotenv()
 class HTMLIngestPipeline:
     """Orchestrates the 2-stage HTML ingestion pipeline"""
 
-    def __init__(self, data_dir: str = "data", use_gpt: bool = True, start_page: int = None, end_page: int = None):
+    def __init__(self, data_dir: str = "data", start_page: int = None, end_page: int = None):
         """
         Initialize pipeline.
 
         Args:
             data_dir: Directory for input/output files
-            use_gpt: Whether to use GPT for intelligent extraction (recommended)
             start_page: Starting page number for extraction (1-indexed, inclusive)
             end_page: Ending page number for extraction (1-indexed, inclusive)
         """
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(exist_ok=True)
-        self.use_gpt = use_gpt
         self.start_page = start_page
         self.end_page = end_page
 
@@ -138,7 +155,7 @@ class HTMLIngestPipeline:
         }
 
         try:
-            extractor = HTMLExtractor(use_gpt=self.use_gpt)
+            extractor = HTMLExtractor()
 
             logger.info(f"Extracting from {ELAWS_OBC_HTML_URL}")
             extraction = extractor.extract_from_url(ELAWS_OBC_HTML_URL)
@@ -512,11 +529,6 @@ def main():
         help="Directory for input/output files"
     )
     parser.add_argument(
-        "--no-gpt",
-        action="store_true",
-        help="Skip GPT and use structural extraction only (faster, less accurate)"
-    )
-    parser.add_argument(
         "--start-page",
         type=int,
         default=None,
@@ -533,7 +545,6 @@ def main():
 
     pipeline = HTMLIngestPipeline(
         data_dir=args.data_dir,
-        use_gpt=not args.no_gpt,
         start_page=args.start_page,
         end_page=args.end_page
     )
