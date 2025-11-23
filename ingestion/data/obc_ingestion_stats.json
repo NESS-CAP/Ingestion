@@ -1,0 +1,21 @@
+{
+  "pass1": {
+    "nodes_created": {
+      "Regulation": 1,
+      "Part": 22,
+      "Section": 776,
+      "Subsection": 2527,
+      "Clause": 12201,
+      "Subclause": 1300,
+      "Paragraph": 2291
+    },
+    "relationships_created": 17019,
+    "success": true
+  },
+  "pass2": {
+    "references_created": 1,
+    "paragraphs_analyzed": 2290
+  },
+  "total_nodes": 19119,
+  "total_relationships": 17020
+}
