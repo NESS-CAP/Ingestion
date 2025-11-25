@@ -4,10 +4,17 @@ from pathlib import Path
 import pdfplumber
 from neo4j import GraphDatabase
 
-# Ensure project root is on sys.path when running as a script
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+def ensure_project_root_on_path():
+    current = Path(__file__).resolve()
+    project_root = next(
+        (p for p in current.parents if (p / "ingestion" / "__init__.py").exists()),
+        None,
+    )
+    if project_root and str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+
+
+ensure_project_root_on_path()
 
 from ingestion.shared.config.settings import NEO4J_CONFIG
 
