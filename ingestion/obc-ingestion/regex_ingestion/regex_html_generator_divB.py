@@ -35,7 +35,6 @@ HTML_PATH = "./building_code_divisionB.html"
 CODE_ID = "ON_BC_332_12"
 CODE_TITLE = "Ontario Regulation 332/12 – Building Code"
 CODE_JURISDICTION = "Ontario"
-CREATED_BY = "du"
 
 # ==========================
 # REGEX PATTERNS
@@ -133,10 +132,9 @@ def merge_division(tx, ref, title):
     MERGE (d:Division {ref: $ref})
     SET d.title        = coalesce(d.title, $title),
         d.code_id      = $code_id,
-        d.jurisdiction = $jurisdiction,
-        d.createdby    = $created_by
+        d.jurisdiction = $jurisdiction
     """, ref=ref, title=title.strip(), code_id=CODE_ID,
-           jurisdiction=CODE_JURISDICTION, created_by=CREATED_BY)
+           jurisdiction=CODE_JURISDICTION)
     return ref
 
 
@@ -145,10 +143,9 @@ def merge_part(tx, ref, title):
     MERGE (p:Part {ref: $ref})
     SET p.title        = coalesce(p.title, $title),
         p.code_id      = $code_id,
-        p.jurisdiction = $jurisdiction,
-        p.createdby    = $created_by
+        p.jurisdiction = $jurisdiction
     """, ref=ref, title=title.strip(), code_id=CODE_ID,
-           jurisdiction=CODE_JURISDICTION, created_by=CREATED_BY)
+           jurisdiction=CODE_JURISDICTION)
     return ref
 
 
@@ -165,10 +162,9 @@ def merge_section(tx, ref, title):
     MERGE (s:Section {ref: $ref})
     SET s.title        = coalesce(s.title, $title),
         s.code_id      = $code_id,
-        s.jurisdiction = $jurisdiction,
-        s.createdby    = $created_by
+        s.jurisdiction = $jurisdiction
     """, ref=ref, title=title.strip(), code_id=CODE_ID,
-           jurisdiction=CODE_JURISDICTION, created_by=CREATED_BY)
+           jurisdiction=CODE_JURISDICTION)
     return ref
 
 
@@ -185,14 +181,12 @@ def merge_subsection(tx, section_ref, ref, title):
     MERGE (sub:Subsection {ref: $ref})
     SET sub.title        = coalesce(sub.title, $title),
         sub.code_id      = $code_id,
-        sub.jurisdiction = $jurisdiction,
-        sub.createdby    = $created_by
+        sub.jurisdiction = $jurisdiction
     WITH sub
     MATCH (sec:Section {ref: $section_ref})
     MERGE (sec)-[:HAS_SUBSECTION]->(sub)
     """, ref=ref, title=title.strip(), section_ref=section_ref,
-           code_id=CODE_ID, jurisdiction=CODE_JURISDICTION,
-           created_by=CREATED_BY)
+           code_id=CODE_ID, jurisdiction=CODE_JURISDICTION)
     return ref
 
 
@@ -201,14 +195,12 @@ def merge_article(tx, subsection_ref, ref, title):
     MERGE (a:Article {ref: $ref})
     SET a.title        = coalesce(a.title, $title),
         a.code_id      = $code_id,
-        a.jurisdiction = $jurisdiction,
-        a.createdby    = $created_by
+        a.jurisdiction = $jurisdiction
     WITH a
     MATCH (sub:Subsection {ref: $subsection_ref})
     MERGE (sub)-[:HAS_ARTICLE]->(a)
     """, ref=ref, title=title.strip(), subsection_ref=subsection_ref,
-           code_id=CODE_ID, jurisdiction=CODE_JURISDICTION,
-           created_by=CREATED_BY)
+           code_id=CODE_ID, jurisdiction=CODE_JURISDICTION)
     return ref
 
 
@@ -218,14 +210,12 @@ def merge_sentence(tx, article_ref, num, text):
     MERGE (s:Sentence {ref: $ref})
     SET s.text         = coalesce(s.text, $text),
         s.code_id      = $code_id,
-        s.jurisdiction = $jurisdiction,
-        s.createdby    = $created_by
+        s.jurisdiction = $jurisdiction
     WITH s
     MATCH (a:Article {ref: $article_ref})
     MERGE (a)-[:HAS_SENTENCE]->(s)
     """, ref=sentence_ref, text=text.strip(), article_ref=article_ref,
-           code_id=CODE_ID, jurisdiction=CODE_JURISDICTION,
-           created_by=CREATED_BY)
+           code_id=CODE_ID, jurisdiction=CODE_JURISDICTION)
     return sentence_ref
 
 
@@ -242,14 +232,12 @@ def merge_clause(tx, sentence_ref, letter, text):
     MERGE (c:Clause {ref: $ref})
     SET c.text         = coalesce(c.text, $text),
         c.code_id      = $code_id,
-        c.jurisdiction = $jurisdiction,
-        c.createdby    = $created_by
+        c.jurisdiction = $jurisdiction
     WITH c
     MATCH (s:Sentence {ref: $sentence_ref})
     MERGE (s)-[:HAS_CLAUSE]->(c)
     """, ref=clause_ref, text=text.strip(), sentence_ref=sentence_ref,
-           code_id=CODE_ID, jurisdiction=CODE_JURISDICTION,
-           created_by=CREATED_BY)
+           code_id=CODE_ID, jurisdiction=CODE_JURISDICTION)
     return clause_ref
 
 
@@ -259,14 +247,12 @@ def merge_subclause(tx, clause_ref, roman, text):
     MERGE (sc:Subclause {ref: $ref})
     SET sc.text        = coalesce(sc.text, $text),
         sc.code_id     = $code_id,
-        sc.jurisdiction = $jurisdiction,
-        sc.createdby   = $created_by
+        sc.jurisdiction = $jurisdiction
     WITH sc
     MATCH (c:Clause {ref: $clause_ref})
     MERGE (c)-[:HAS_SUBCLAUSE]->(sc)
     """, ref=subclause_ref, text=text.strip(), clause_ref=clause_ref,
-           code_id=CODE_ID, jurisdiction=CODE_JURISDICTION,
-           created_by=CREATED_BY)
+           code_id=CODE_ID, jurisdiction=CODE_JURISDICTION)
     return subclause_ref
 
 
@@ -277,11 +263,10 @@ def merge_table(tx, table_ref, title, text, notes, sentence_refs):
         t.text         = $text,
         t.notes        = $notes,
         t.code_id      = $code_id,
-        t.jurisdiction = $jurisdiction,
-        t.createdby    = $created_by
+        t.jurisdiction = $jurisdiction
     """, ref=table_ref, title=title.strip(), text=text.strip(),
            notes=notes.strip(), code_id=CODE_ID,
-           jurisdiction=CODE_JURISDICTION, created_by=CREATED_BY)
+           jurisdiction=CODE_JURISDICTION)
 
     for sref in sentence_refs:
         tx.run("""
